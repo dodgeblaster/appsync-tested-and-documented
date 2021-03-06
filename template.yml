@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+    APIName:
+        Type: String
+
+Resources:
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # DB
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    MyTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            TableName: appsync-example
+            AttributeDefinitions:
+                - AttributeName: id
+                  AttributeType: S
+            KeySchema:
+                - AttributeName: id
+                  KeyType: HASH
+            BillingMode: PAY_PER_REQUEST
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # DB Permissions
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    RoleAppSyncDynamoDB:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: !Sub ${APIName}-dynamodb-policy
+            ManagedPolicyArns:
+                - !Ref PolicyDynamoDB
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - appsync.amazonaws.com
+
+    PolicyDynamoDB:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            Path: /appsync/
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - dynamodb:*
+                      Resource:
+                          - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Appsync
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    AppSyncAPI:
+        Type: AWS::AppSync::GraphQLApi
+        Properties:
+            Name: !Ref APIName
+            AuthenticationType: API_KEY
+
+    AppSyncSchema:
+        Type: AWS::AppSync::GraphQLSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            DefinitionS3Location: schema.graphql
+
+    AppSyncAPIKey:
+        Type: AWS::AppSync::ApiKey
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            Expires: 1627859769
+
+    AppSyncDataSourceDynamoDB:
+        Type: AWS::AppSync::DataSource
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            Name: dynamodb
+            Type: AMAZON_DYNAMODB
+            ServiceRoleArn: !GetAtt RoleAppSyncDynamoDB.Arn
+            DynamoDBConfig:
+                TableName: !Ref MyTable
+                AwsRegion: !Sub ${AWS::Region}
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Appsync Resolvers
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    ResolverGet:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Query
+            FieldName: note
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "GetItem",
+                  "key": {
+                    "id": { "S": "${context.arguments.id}" }
+                  },
+                  "consistentRead": true
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+
+    ResolverList:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Query
+            FieldName: notes
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "Scan",
+                  "limit" : 60
+                }
+            ResponseMappingTemplate: $util.toJson($context.result.items)
+
+    ResolverCreate:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Mutation
+            FieldName: create
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "PutItem",
+                  "key": {
+                    "id": $util.dynamodb.toDynamoDBJson($util.autoId())
+                  },
+                  "attributeValues" : $util.dynamodb.toMapValuesJson($context.arguments)
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+
+    ResolverUpdate:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Mutation
+            FieldName: update
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "PutItem",
+                  "key": {
+                    "id": $util.dynamodb.toDynamoDBJson($context.arguments.id)
+                  },
+                  "attributeValues" : $util.dynamodb.toMapValuesJson($context.arguments)        
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+
+    ResolverDelete:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Mutation
+            FieldName: remove
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "DeleteItem",
+                  "key" : {
+                    "id" : $util.dynamodb.toDynamoDBJson($ctx.args.id)
+                  }
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+
+Outputs:
+    APIKey:
+        Description: API Key
+        Value: !GetAtt AppSyncAPIKey.ApiKey
+
+    GraphQL:
+        Description: GraphQL URL
+        Value: !GetAtt AppSyncAPI.GraphQLUrl

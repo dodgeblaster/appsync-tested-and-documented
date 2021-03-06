@@ -1,0 +1,8 @@
+{
+    "scripts": {
+        "deploy": "sam build && sam deploy",
+        "remove": "aws cloudformation delete-stack --stack-name=AppsyncTested",
+        "deploy-pipeline": "aws cloudformation deploy --stack-name=AppsyncTestedPipeline --template-file=pipeline.yml --capabilities=CAPABILITY_IAM",
+        "remove-pipeline": "aws cloudformation delete-stack --stack-name=AppsyncTestedPipeline"
+    }
+}
