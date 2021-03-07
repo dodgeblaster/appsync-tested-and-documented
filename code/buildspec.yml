@@ -16,7 +16,8 @@ phases:
     build:
         commands:
             - echo "Build phase"
-            - sam build
+            - ls
+            #- sam build
     post_build:
         commands:
             - echo "Post-build phase"
