@@ -161,20 +161,20 @@ Resources:
                             OAuthToken: '{{resolve:secretsmanager:GithubToken:SecretString:GithubToken}}'
                             PollForSourceChanges: false
                         RunOrder: 1
-                - Name: Build
-                  Actions:
-                      - Name: CodeBuild
-                        ActionTypeId:
-                            Category: Build
-                            Owner: AWS
-                            Provider: CodeBuild
-                            Version: '1'
-                        Configuration:
-                            ProjectName: !Ref CodeBuildProject
-                        InputArtifacts:
-                            - Name: SourceOutput
-                        OutputArtifacts:
-                            - Name: BuildArtifactAsZip
+                # - Name: Build
+                #   Actions:
+                #       - Name: CodeBuild
+                #         ActionTypeId:
+                #             Category: Build
+                #             Owner: AWS
+                #             Provider: CodeBuild
+                #             Version: '1'
+                #         Configuration:
+                #             ProjectName: !Ref CodeBuildProject
+                #         InputArtifacts:
+                #             - Name: SourceOutput
+                #         OutputArtifacts:
+                #             - Name: BuildArtifactAsZip
                 - Name: Stage
                   Actions:
                       # - - -
@@ -192,13 +192,11 @@ Resources:
                             RoleArn: !GetAtt CloudFormationExecutionRole.Arn
                             StackName: AppsyncTested
                             ChangeSetName: pipeline-changeset
-                            TemplatePath: 'BuildArtifactAsZip::packaged.yml'
+                            TemplatePath: 'SourceOutput::code/template.yml'
                             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                             ParameterOverrides: '{"APIName": "AppsyncTested"}'
-
-                            #TemplateConfiguration: 'my-project--BuildArtifact::template-configuration.json'
                         InputArtifacts:
-                            - Name: BuildArtifactAsZip
+                            - Name: SourceOutput
                       - Name: ExecuteChangeSet
                         ActionTypeId:
                             Category: Deploy

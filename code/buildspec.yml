@@ -3,13 +3,6 @@ phases:
     install:
         commands:
             - echo "Install phase"
-            # - pip install --upgrade pip
-            # - pip install pipenv
-            # - pipenv install awscli aws-sam-cli
-            # - node -v
-            # - npm -v
-            # - cd simpleApp
-            # - npm install
     pre_build:
         commands:
             - echo "Pre-build phase"
@@ -17,19 +10,12 @@ phases:
     build:
         commands:
             - echo "Build phase"
-            - ls
-            - sam build
     post_build:
         commands:
             - echo "Post-build phase"
-            - echo $BUILD_OUTPUT_BUCKET
-            - sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
-##################################
-# Build Artifacts to be uploaded #
-##################################
+            #- sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
 
 artifacts:
     files:
-        # list of local files relative to this build environment that will be added to the final artifact (zip)
         - code/packaged.yml
     discard-paths: yes
