@@ -106,7 +106,7 @@ Resources:
                                 - 's3:GetObjectVersion'
                                 - 's3:PutObject'
                             Resource:
-                                - !Sub 'arn:aws:s3:::${CodePipelineArtifactStoreBucket}/*'
+                                - '*' # !Sub 'arn:aws:s3:::${CodePipelineArtifactStoreBucket}/*'
                 - PolicyName: CodeBuildParameterStore
                   PolicyDocument:
                       Version: '2012-10-17'
