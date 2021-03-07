@@ -20,7 +20,8 @@ phases:
     post_build:
         commands:
             - echo "Post-build phase"
-            - sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
+            - echo $BUILD_OUTPUT_BUCKET
+            # - sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
 
 ##################################
 # Build Artifacts to be uploaded #
