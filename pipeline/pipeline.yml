@@ -112,7 +112,7 @@ Resources:
                       Version: '2012-10-17'
                       Statement:
                           - Effect: Allow
-                            Action: 'ssm:GetParameters'
+                            Action: '*' #'ssm:GetParameters'
                             Resource: '*'
     # - - - - - - - - - - - - - - - - - - - - - - - -
     # CodePipeline
