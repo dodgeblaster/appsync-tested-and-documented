@@ -23,13 +23,12 @@ phases:
             - echo "Post-build phase"
             - echo $BUILD_OUTPUT_BUCKET
             # - sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
-
 ##################################
 # Build Artifacts to be uploaded #
 ##################################
 
-artifacts:
-    files:
-        # list of local files relative to this build environment that will be added to the final artifact (zip)
-        - app/packaged.yml
-    discard-paths: yes
+# artifacts:
+#     files:
+#         # list of local files relative to this build environment that will be added to the final artifact (zip)
+#         - app/packaged.yml
+#     discard-paths: yes
