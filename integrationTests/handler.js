@@ -74,38 +74,38 @@ exports.handler = async (event, context) => {
         return message
     }
 
+    const values = await getStackOutputs('us-east-1', 'AppsyncTested')
+    const post = (data) => {
+        return new Promise((res1, rej) => {
+            try {
+                const options = {
+                    hostname: values.url.substr(8, values.url.length - 16),
+                    port: 443,
+                    path: '/graphql',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': values.key
+                    }
+                }
+                let body = ''
+                const post_req = https.request(options, (res) => {
+                    res.setEncoding('utf8')
+                    res.on('data', (chunk) => (body = body + chunk))
+                    res.on('end', () => res1(body))
+                })
+                post_req.write(JSON.stringify(data))
+                post_req.end()
+            } catch (e) {
+                rej(e)
+            }
+        })
+    }
+
     /**
      * Test
      */
     try {
-        const values = await getStackOutputs('us-east-1', 'AppsyncTested')
-        const post = (data) => {
-            return new Promise((res1, rej) => {
-                try {
-                    const options = {
-                        hostname: values.url.substr(8, values.url.length - 16),
-                        port: 443,
-                        path: '/graphql',
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': values.key
-                        }
-                    }
-                    let body = ''
-                    const post_req = https.request(options, (res) => {
-                        res.setEncoding('utf8')
-                        res.on('data', (chunk) => (body = body + chunk))
-                        res.on('end', () => res1(body))
-                    })
-                    post_req.write(JSON.stringify(data))
-                    post_req.end()
-                } catch (e) {
-                    rej(e)
-                }
-            })
-        }
-
         /**
          * Create a Note
          */

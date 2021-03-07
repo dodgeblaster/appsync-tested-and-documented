@@ -106,13 +106,13 @@ Resources:
                                 - 's3:GetObjectVersion'
                                 - 's3:PutObject'
                             Resource:
-                                - '*' # !Sub 'arn:aws:s3:::${CodePipelineArtifactStoreBucket}/*'
+                                - !Sub 'arn:aws:s3:::${CodePipelineArtifactStoreBucket}/*'
                 - PolicyName: CodeBuildParameterStore
                   PolicyDocument:
                       Version: '2012-10-17'
                       Statement:
                           - Effect: Allow
-                            Action: '*' #'ssm:GetParameters'
+                            Action: 'ssm:GetParameters'
                             Resource: '*'
     # - - - - - - - - - - - - - - - - - - - - - - - -
     # CodePipeline
@@ -175,56 +175,44 @@ Resources:
                             - Name: SourceOutput
                         OutputArtifacts:
                             - Name: BuildArtifactAsZip
-                # - Name: Stage
-                #   Actions:
-                #       # - - -
-                #       # Create change set
-                #       # - - -
-                #       - Name: CreateChangeSet
-                #         ActionTypeId:
-                #             Category: Deploy
-                #             Owner: AWS
-                #             Provider: CloudFormation
-                #             Version: '1'
-                #         RunOrder: 1
-                #         Configuration:
-                #             ActionMode: CHANGE_SET_REPLACE
-                #             RoleArn: !GetAtt CodePipelineServiceRole.Arn
-                #             StackName: AppsyncTested
-                #             ChangeSetName: pipeline-changeset
-                #             TemplatePath: 'SourceOutput::template.yml'
-                #             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+                - Name: Stage
+                  Actions:
+                      # - - -
+                      # Create change set
+                      # - - -
+                      - Name: CreateChangeSet
+                        ActionTypeId:
+                            Category: Deploy
+                            Owner: AWS
+                            Provider: CloudFormation
+                            Version: '1'
+                        RunOrder: 1
+                        Configuration:
+                            ActionMode: CHANGE_SET_REPLACE
+                            RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                            StackName: AppsyncTested
+                            ChangeSetName: pipeline-changeset
+                            TemplatePath: 'BuildArtifactAsZip::packaged.yml'
+                            Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+                            ParameterOverrides: '{"APIName": "AppsyncTested"}'
 
-                #             #
-
-                #             ParameterOverrides: '{"APIName": "AppsyncTested"}'
-
-                #             #TemplateConfiguration: 'my-project--BuildArtifact::template-configuration.json'
-                #         InputArtifacts:
-                #             - Name: BuildArtifactAsZip
-                #       - Name: ExecuteChangeSet
-                #         ActionTypeId:
-                #             Category: Deploy
-                #             Owner: AWS
-                #             Provider: CloudFormation
-                #             Version: '1'
-                #         RunOrder: 2
-                #         Configuration:
-                #             ActionMode: CHANGE_SET_EXECUTE
-                #             StackName: AppsyncTested
-                #             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
-                #             ChangeSetName: pipeline-changeset
-                #             #TemplatePath: 'SourceOutput::template.yml'
-                #             RoleArn: !GetAtt
-                #                 - CodePipelineServiceRole
-                #                 - Arn
-                #             ParameterOverrides: '{"APIName": "AppsyncTested"}'
-
-                #             #TemplateConfiguration: 'my-project--BuildArtifact::template-configuration.json'
-
-                #         OutputArtifacts: []
-                #         InputArtifacts:
-                #             - Name: SourceOutput
+                            #TemplateConfiguration: 'my-project--BuildArtifact::template-configuration.json'
+                        InputArtifacts:
+                            - Name: BuildArtifactAsZip
+                      - Name: ExecuteChangeSet
+                        ActionTypeId:
+                            Category: Deploy
+                            Owner: AWS
+                            Provider: CloudFormation
+                            Version: '1'
+                        RunOrder: 2
+                        Configuration:
+                            ActionMode: CHANGE_SET_EXECUTE
+                            StackName: AppsyncTested
+                            RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                            ChangeSetName: pipeline-changeset
+                        OutputArtifacts:
+                            - Name: pipeline-changeset-output
                 - Name: Staging
                   Actions:
                       - Name: IntegrationTests
@@ -233,7 +221,7 @@ Resources:
                             Owner: AWS
                             Provider: Lambda
                             Version: '1'
-                        RunOrder: 1
+                        RunOrder: 3
                         Configuration:
                             FunctionName: appsync-tested-inttests-dev-NotesTest
                         OutputArtifacts: []
@@ -297,16 +285,28 @@ Resources:
                             Resource: '*'
                           - Effect: Allow
                             Action:
-                                # - 'elasticbeanstalk:*'
-                                # - 'ec2:*'
-                                # - 'elasticloadbalancing:*'
-                                # - 'autoscaling:*'
-                                # - 'cloudwatch:*'
-                                # - 's3:*'
-                                # - 'sns:*'
-                                # - 'cloudformation:*'
-                                # - 'rds:*'
-                                # - 'sqs:*'
-                                # - 'ecs:*'
-                                - '*'
+                                - 'elasticbeanstalk:*'
+                                - 'ec2:*'
+                                - 'elasticloadbalancing:*'
+                                - 'autoscaling:*'
+                                - 'cloudwatch:*'
+                                - 's3:*'
+                                - 'sns:*'
+                                - 'cloudformation:*'
+                                - 'rds:*'
+                                - 'sqs:*'
+                                - 'ecs:*'
                             Resource: '*'
+    CloudFormationExecutionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    Action: 'sts:AssumeRole'
+                    Effect: Allow
+                    Principal:
+                        Service: cloudformation.amazonaws.com
+            Path: /
+            ManagedPolicyArns:
+                - 'arn:aws:iam::aws:policy/AdministratorAccess'
