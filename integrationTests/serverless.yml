@@ -1,0 +1,29 @@
+service: appsync-tested-inttests
+frameworkVersion: '2'
+provider:
+    name: aws
+    runtime: nodejs12.x
+
+    iamRoleStatements:
+        - Effect: Allow
+          Action:
+              - cloudformation:DescribeStacks
+          Resource:
+              - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
+        - Effect: Allow
+          Action:
+              - codepipeline:*
+          Resource:
+              - '*'
+
+functions:
+    NotesTest:
+        handler: handler.handler
+
+resources:
+    Outputs:
+        NotesTest:
+            Description: 'Notes Test Lambda Arn'
+            Value: !GetAtt
+                - 'NotesTestLambdaFunction'
+                - 'Arn'
