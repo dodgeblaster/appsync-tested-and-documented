@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "deploy": "aws cloudformation deploy --stack-name=AppsyncTestedPipeline --template-file=pipeline.yml --capabilities=CAPABILITY_IAM",
+        "deploy": "aws cloudformation deploy --stack-name=AppsyncTestedPipeline --template-file=template.yml --capabilities=CAPABILITY_IAM",
         "remove": "aws cloudformation delete-stack --stack-name=AppsyncTestedPipeline"
     }
 }

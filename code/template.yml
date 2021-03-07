@@ -65,7 +65,7 @@ Resources:
         Type: AWS::AppSync::GraphQLSchema
         Properties:
             ApiId: !GetAtt AppSyncAPI.ApiId
-            Definition: |
+            Definition: >
                 type Note {
                     id: String!
                     title: String!
@@ -194,6 +194,66 @@ Resources:
                   }
                 }
             ResponseMappingTemplate: $util.toJson($context.result)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Lambda Function
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    ExampleFunction:
+        Type: AWS::Lambda::Function
+        Properties:
+            Runtime: nodejs12.x
+            Role: !GetAtt LambdaRole.Arn
+            Handler: index.handler
+            Code:
+                ZipFile: !Sub
+                    - |
+                        const aws = require('aws-sdk')
+                        const eventbridge = new aws.EventBridge()
+                        exports.handler = async (event) {
+                            const params = {
+                                Entries: [
+                                    {
+                                        EventBusName: '${EventBus}',
+                                        Source: 'custom.notesAppsync',
+                                        DetailType: 'ExampleType',
+                                        Time: new Date(),
+                                        Detail: JSON.stringify(data)
+                                    }
+                                ]
+                            }
+                            await eventbridge.putEvents(params).promise()
+                            return {
+                                message: "Success"
+                            }
+                        }
+                    - EventBus: MyEventBus
+            Description: Example Inline Function.
+            TracingConfig:
+                Mode: Active
+
+    LambdaRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: !Sub ${APIName}-lambda-policy
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+            Policies:
+                - PolicyName: CodeBuildParameterStore
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - dynamodb:*
+                            Resource:
+                                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
 
 Outputs:
     APIKey:
