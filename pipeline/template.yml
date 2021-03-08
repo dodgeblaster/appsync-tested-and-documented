@@ -53,24 +53,24 @@ Resources:
     # Code Build Project
     # If there are no lambda functions, then this can be skipped
     # - - - - - - - - - - - - - - - - - - - - - - - -
-    CodeBuildProject:
-        Type: AWS::CodeBuild::Project
-        Properties:
-            Artifacts:
-                Type: CODEPIPELINE
-            Environment:
-                ComputeType: BUILD_GENERAL1_SMALL
-                Image: aws/codebuild/standard:5.0
-                Type: LINUX_CONTAINER
-                EnvironmentVariables:
-                    - Name: BUILD_OUTPUT_BUCKET
-                      Value: !Ref CodePipelineArtifactStoreBucket
-            Name: first-code-build
-            QueuedTimeoutInMinutes: 5
-            Source:
-                Type: CODEPIPELINE
-                BuildSpec: code/buildspec.yml
-            ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+    # CodeBuildProject:
+    #     Type: AWS::CodeBuild::Project
+    #     Properties:
+    #         Artifacts:
+    #             Type: CODEPIPELINE
+    #         Environment:
+    #             ComputeType: BUILD_GENERAL1_SMALL
+    #             Image: aws/codebuild/standard:5.0
+    #             Type: LINUX_CONTAINER
+    #             EnvironmentVariables:
+    #                 - Name: BUILD_OUTPUT_BUCKET
+    #                   Value: !Ref CodePipelineArtifactStoreBucket
+    #         Name: first-code-build
+    #         QueuedTimeoutInMinutes: 5
+    #         Source:
+    #             Type: CODEPIPELINE
+    #             BuildSpec: code/buildspec.yml
+    #         ServiceRole: !GetAtt CodeBuildServiceRole.Arn
     CodeBuildServiceRole:
         Type: AWS::IAM::Role
         Properties:
@@ -137,9 +137,7 @@ Resources:
         Type: 'AWS::CodePipeline::Pipeline'
         Properties:
             Name: github-events-pipeline
-            RoleArn: !GetAtt
-                - CodePipelineServiceRole
-                - Arn
+            RoleArn: !GetAtt CodePipelineServiceRole.Arn
             ArtifactStore:
                 Type: S3
                 Location: !Ref CodePipelineArtifactStoreBucket
@@ -161,6 +159,7 @@ Resources:
                             OAuthToken: '{{resolve:secretsmanager:GithubToken:SecretString:GithubToken}}'
                             PollForSourceChanges: false
                         RunOrder: 1
+                # If there are no lambda functions, then this can be skipped
                 # - Name: Build
                 #   Actions:
                 #       - Name: CodeBuild
@@ -175,11 +174,8 @@ Resources:
                 #             - Name: SourceOutput
                 #         OutputArtifacts:
                 #             - Name: BuildArtifactAsZip
-                - Name: Stage
+                - Name: Staging
                   Actions:
-                      # - - -
-                      # Create change set
-                      # - - -
                       - Name: CreateChangeSet
                         ActionTypeId:
                             Category: Deploy
@@ -211,7 +207,7 @@ Resources:
                             ChangeSetName: pipeline-changeset
                         OutputArtifacts:
                             - Name: pipeline-changeset-output
-                - Name: Staging
+                - Name: Test
                   Actions:
                       - Name: IntegrationTests
                         ActionTypeId:
@@ -225,6 +221,46 @@ Resources:
                         OutputArtifacts: []
                         InputArtifacts: []
                         Region: us-east-1
+                - Name: Prod
+                  Actions:
+                      - Name: DeploymentApproval
+                        ActionTypeId:
+                            Category: Approval
+                            Owner: AWS
+                            Provider: Manual
+                            Version: '1'
+                        RunOrder: 1
+                      - Name: CreateChangeSet
+                        ActionTypeId:
+                            Category: Deploy
+                            Owner: AWS
+                            Provider: CloudFormation
+                            Version: '1'
+                        RunOrder: 1
+                        Configuration:
+                            ActionMode: CHANGE_SET_REPLACE
+                            RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                            StackName: AppsyncTested
+                            ChangeSetName: pipeline-changeset
+                            TemplatePath: 'SourceOutput::code/template.yml'
+                            Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+                            ParameterOverrides: '{"APIName": "AppsyncTested"}'
+                        InputArtifacts:
+                            - Name: SourceOutput
+                      - Name: ExecuteChangeSet
+                        ActionTypeId:
+                            Category: Deploy
+                            Owner: AWS
+                            Provider: CloudFormation
+                            Version: '1'
+                        RunOrder: 2
+                        Configuration:
+                            ActionMode: CHANGE_SET_EXECUTE
+                            StackName: AppsyncTested
+                            RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+                            ChangeSetName: pipeline-changeset
+                        OutputArtifacts:
+                            - Name: pipeline-prodchangeset-output
     CodePipelineServiceRole:
         Type: 'AWS::IAM::Role'
         Properties:
