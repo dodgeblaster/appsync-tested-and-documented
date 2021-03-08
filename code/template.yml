@@ -21,38 +21,6 @@ Resources:
             BillingMode: PAY_PER_REQUEST
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # DB Permissions
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    RoleAppSyncDynamoDB:
-        Type: AWS::IAM::Role
-        Properties:
-            RoleName: !Sub ${APIName}-dynamodb-policy
-            ManagedPolicyArns:
-                - !Ref PolicyDynamoDB
-            AssumeRolePolicyDocument:
-                Version: 2012-10-17
-                Statement:
-                    - Effect: Allow
-                      Action:
-                          - sts:AssumeRole
-                      Principal:
-                          Service:
-                              - appsync.amazonaws.com
-
-    PolicyDynamoDB:
-        Type: AWS::IAM::ManagedPolicy
-        Properties:
-            Path: /appsync/
-            PolicyDocument:
-                Version: 2012-10-17
-                Statement:
-                    - Effect: Allow
-                      Action:
-                          - dynamodb:*
-                      Resource:
-                          - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Appsync
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     AppSyncAPI:
@@ -81,6 +49,7 @@ Resources:
                     create(title: String!, content: String!): Note!
                     update(id: ID!, title: String!, content: String!): Note!
                     remove(id: ID!): Note!
+                    addUser(email: String!): String!
                 }
 
     AppSyncAPIKey:
@@ -89,6 +58,9 @@ Resources:
             ApiId: !GetAtt AppSyncAPI.ApiId
             Expires: 1627859769
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Appsync Datasources
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     AppSyncDataSourceDynamoDB:
         Type: AWS::AppSync::DataSource
         Properties:
@@ -100,10 +72,70 @@ Resources:
                 TableName: !Ref MyTable
                 AwsRegion: !Sub ${AWS::Region}
 
+    AppSyncDataSourceEventsLambda:
+        Type: AWS::AppSync::DataSource
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            Name: eventsLambda
+            Type: AWS_LAMBDA
+            ServiceRoleArn: !GetAtt RoleAppSyncEventLambda.Arn
+            LambdaConfig:
+                LambdaFunctionArn: !GetAtt ExampleFunction.Arn
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Appsync Datasource Permissions
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    RoleAppSyncDynamoDB:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: !Sub ${APIName}-dynamodb-policy
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - appsync.amazonaws.com
+            Policies:
+                - PolicyName: PolicyDynamoDB
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - dynamodb:*
+                            Resource:
+                                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
+
+    RoleAppSyncEventLambda:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: !Sub ${APIName}-eventLambda-policy
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - appsync.amazonaws.com
+            Policies:
+                - PolicyName: CodeBuildParameterStore
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - lambda:*
+                            Resource:
+                                - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:*
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Appsync Resolvers
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
     ResolverGet:
         Type: AWS::AppSync::Resolver
         DependsOn: AppSyncSchema
@@ -195,6 +227,27 @@ Resources:
                 }
             ResponseMappingTemplate: $util.toJson($context.result)
 
+    ResolverAddUser:
+        Type: AWS::AppSync::Resolver
+        DependsOn: AppSyncSchema
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            TypeName: Mutation
+            FieldName: addUser
+            DataSourceName: !GetAtt AppSyncDataSourceEventsLambda.Name
+            RequestMappingTemplate: >
+                {
+                    "version": "2018-05-29",
+                    "operation": "Invoke",
+                    "payload": {
+                        "field": "addUser",
+                        "arguments": {
+                            "email": $util.toJson($context.arguments.email)
+                        }
+                    }
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Lambda Function
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -209,24 +262,22 @@ Resources:
                     - |
                         const aws = require('aws-sdk')
                         const eventbridge = new aws.EventBridge()
-                        exports.handler = async (event) {
+                        exports.handler = async (event) => {
                             const params = {
                                 Entries: [
                                     {
                                         EventBusName: '${EventBus}',
                                         Source: 'custom.notesAppsync',
-                                        DetailType: 'ExampleType',
+                                        DetailType: 'addUserRequested',
                                         Time: new Date(),
-                                        Detail: JSON.stringify(data)
+                                        Detail: JSON.stringify(event.arguments)
                                     }
                                 ]
                             }
                             await eventbridge.putEvents(params).promise()
-                            return {
-                                message: "Success"
-                            }
+                            return "Success"
                         }
-                    - EventBus: MyEventBus
+                    - EventBus: EventBridgeExample
             Description: Example Inline Function.
             TracingConfig:
                 Mode: Active
@@ -245,7 +296,7 @@ Resources:
                           Service:
                               - lambda.amazonaws.com
             Policies:
-                - PolicyName: CodeBuildParameterStore
+                - PolicyName: !Sub ${APIName}-Dynamo-lambdapolicy
                   PolicyDocument:
                       Version: '2012-10-17'
                       Statement:
@@ -254,6 +305,15 @@ Resources:
                                 - dynamodb:*
                             Resource:
                                 - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
+                - PolicyName: !Sub ${APIName}-Events-lambdapolicy
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - events:*
+                            Resource:
+                                - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/*
 
 Outputs:
     APIKey:
