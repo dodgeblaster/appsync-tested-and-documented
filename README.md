@@ -2,13 +2,13 @@
 
 ## Unit Tests
 
-Don't need them! Our AppSync app is 100% written in cloudformation. No could to test
+Don't need them! Our AppSync app is 100% written in cloudformation. No code to test
 
 ## Integration Tests
 
 `/api/tests` contains a serverless project, which has a Lambda that will
 
--   get appsync endpoint and api key from cloudformation outputs ask call
+-   get appsync endpoint and api key from cloudformation outputs sdk call
 -   create a note
 -   get a note
 -   remove a note
