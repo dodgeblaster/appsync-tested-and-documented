@@ -3,19 +3,21 @@ phases:
     install:
         commands:
             - echo "Install phase"
+            - npm i serverless -g
     pre_build:
         commands:
             - echo "Pre-build phase"
-            - cd ./code
+            - cd ./api/tests
     build:
         commands:
             - echo "Build phase"
     post_build:
         commands:
             - echo "Post-build phase"
+            - sls package
             #- sam package --s3-bucket $BUILD_OUTPUT_BUCKET --template-file template.yml --output-template-file packaged.yml
 
 artifacts:
     files:
-        - code/packaged.yml
+        - api/tests/packaged.yml
     discard-paths: yes

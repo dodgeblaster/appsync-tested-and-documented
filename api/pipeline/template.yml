@@ -188,7 +188,7 @@ Resources:
                             RoleArn: !GetAtt CloudFormationExecutionRole.Arn
                             StackName: AppsyncTested
                             ChangeSetName: pipeline-changeset
-                            TemplatePath: 'SourceOutput::api/template.yml'
+                            TemplatePath: 'SourceOutput::api/app/template.yml'
                             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                             ParameterOverrides: '{"APIName": "AppsyncTested"}'
                         InputArtifacts:
@@ -242,7 +242,7 @@ Resources:
                             RoleArn: !GetAtt CloudFormationExecutionRole.Arn
                             StackName: AppsyncTested
                             ChangeSetName: pipeline-changeset
-                            TemplatePath: 'SourceOutput::api/template.yml'
+                            TemplatePath: 'SourceOutput::api/app/template.yml'
                             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                             ParameterOverrides: '{"APIName": "AppsyncTested"}'
                         InputArtifacts:

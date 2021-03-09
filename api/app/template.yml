@@ -229,7 +229,7 @@ Resources:
 
     # Resolver Event Pipeline
     # https://dev.to/joshuaakahn/building-aws-appsync-pipeline-resolvers-with-aws-cloudformation-1fjg
-    ListPostsQueryResolver:
+    ResolverSignup:
         Type: AWS::AppSync::Resolver
         Properties:
             ApiId: !GetAtt AppSyncAPI.ApiId
@@ -312,25 +312,24 @@ Resources:
             RoleArn: !GetAtt SignupCompletedRole.Arn
             DefinitionString: >
                 {
-                  "Comment": "Handles User Signup Completed Workflow",
-                  "StartAt": "Update Create User State",
-                  "States": {
-                      "Update Create User State": {
-                          "Type": "Task",
-                          "Resource": "arn:aws:states:::dynamodb:putItem",
+                    "Comment": "Handles User Signup Completed Workflow",
+                    "StartAt": "Update Create User State",
+                    "States": {
+                        "Update Create User State": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::dynamodb:putItem",
                             "Parameters": {
                                 "TableName": "appsync-example",
                                 "Item": {
-                                        "id": {"S.$": "$.detail.id"},
-                                        "email": {"S": "example"},
-                                        "status": {"S": "complete"}
-                                       
+                                    "id": {"S.$": "$.detail.id"},
+                                    "email": {"S": "example"},
+                                    "status": {"S": "complete"}                          
                                 }
-                          },
-                          "ResultPath": "$.DynamoDB",
-                          "End": true
-                      }
-                  }
+                            },
+                            "ResultPath": "$.DynamoDB",
+                            "End": true
+                        }
+                    }
                 }
 
     InvokeWorkflowRole:
