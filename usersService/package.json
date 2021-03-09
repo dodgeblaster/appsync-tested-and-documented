@@ -1,0 +1,6 @@
+{
+    "scripts": {
+        "deploy": "aws cloudformation deploy --stack-name=AppsyncTestedUserService --template-file=template.yml --capabilities=CAPABILITY_NAMED_IAM",
+        "remove": "aws cloudformation delete-stack --stack-name=AppsyncTestedUserService"
+    }
+}

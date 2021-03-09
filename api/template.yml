@@ -21,7 +21,7 @@ Resources:
             BillingMode: PAY_PER_REQUEST
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # Appsync
+    # Appsync General
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     AppSyncAPI:
         Type: AWS::AppSync::GraphQLApi
@@ -49,7 +49,7 @@ Resources:
                     create(title: String!, content: String!): Note!
                     update(id: ID!, title: String!, content: String!): Note!
                     remove(id: ID!): Note!
-                    addUser(email: String!): String!
+                    signUp(email: String!): String!
                 }
 
     AppSyncAPIKey:
@@ -80,7 +80,7 @@ Resources:
             Type: AWS_LAMBDA
             ServiceRoleArn: !GetAtt RoleAppSyncEventLambda.Arn
             LambdaConfig:
-                LambdaFunctionArn: !GetAtt ExampleFunction.Arn
+                LambdaFunctionArn: !ImportValue AppSyncTestedResolverEventFunction
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Appsync Datasource Permissions
@@ -227,76 +227,147 @@ Resources:
                 }
             ResponseMappingTemplate: $util.toJson($context.result)
 
-    ResolverAddUser:
+    # Resolver Event Pipeline
+    # https://dev.to/joshuaakahn/building-aws-appsync-pipeline-resolvers-with-aws-cloudformation-1fjg
+    ListPostsQueryResolver:
         Type: AWS::AppSync::Resolver
-        DependsOn: AppSyncSchema
         Properties:
             ApiId: !GetAtt AppSyncAPI.ApiId
             TypeName: Mutation
-            FieldName: addUser
+            FieldName: signUp
+            Kind: PIPELINE
+            PipelineConfig:
+                Functions:
+                    - !GetAtt WriteStatePipelineFunction.FunctionId
+                    - !GetAtt EmitEventPipelineFunction.FunctionId
+            RequestMappingTemplate: |
+                $util.qr($ctx.stash.put("id", "id_1234"))  
+                $util.qr($ctx.stash.put("event", "signup")) 
+                {}
+            ResponseMappingTemplate: |
+                $util.toJson($ctx.result)
+
+    WriteStatePipelineFunction:
+        Type: AWS::AppSync::FunctionConfiguration
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            FunctionVersion: '2018-05-29'
+            Name: WriteStatePipelineFunction
+            DataSourceName: !GetAtt AppSyncDataSourceDynamoDB.Name
+            RequestMappingTemplate: >
+                {
+                  "version": "2017-02-28",
+                  "operation": "PutItem",
+                  "key": {
+                      "id": $util.dynamodb.toDynamoDBJson($cxt.stash.id),
+                      "event": $util.dynamodb.toDynamoDBJson($ctx.stash.event),
+                      "state": $util.dynamodb.toDynamoDBJson("processing")
+                  },
+                  "attributeValues" : $util.dynamodb.toMapValuesJson($context.arguments)
+                }
+            ResponseMappingTemplate: $util.toJson($context.result)
+    EmitEventPipelineFunction:
+        Type: AWS::AppSync::FunctionConfiguration
+        Properties:
+            ApiId: !GetAtt AppSyncAPI.ApiId
+            FunctionVersion: '2018-05-29'
+            Name: EmitEventPipelineFunction
             DataSourceName: !GetAtt AppSyncDataSourceEventsLambda.Name
             RequestMappingTemplate: >
                 {
                     "version": "2018-05-29",
                     "operation": "Invoke",
                     "payload": {
-                        "field": "addUser",
-                        "arguments": {
-                            "email": $util.toJson($context.arguments.email)
+                        "source": "custom.AppsyncTested",
+                        "event": $util.toJson($ctx.stash.event),
+                        "data": {
+                            "id": $util.toJson($ctx.stash.id)
                         }
                     }
                 }
             ResponseMappingTemplate: $util.toJson($context.result)
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    # Lambda Function
+    # Signup Complete
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    ExampleFunction:
-        Type: AWS::Lambda::Function
+    SignupCompleteEventRule:
+        Type: AWS::Events::Rule
         Properties:
-            Runtime: nodejs12.x
-            Role: !GetAtt LambdaRole.Arn
-            Handler: index.handler
-            Code:
-                ZipFile: !Sub
-                    - |
-                        const aws = require('aws-sdk')
-                        const eventbridge = new aws.EventBridge()
-                        exports.handler = async (event) => {
-                            const params = {
-                                Entries: [
-                                    {
-                                        EventBusName: '${EventBus}',
-                                        Source: 'custom.notesAppsync',
-                                        DetailType: 'addUserRequested',
-                                        Time: new Date(),
-                                        Detail: JSON.stringify(event.arguments)
-                                    }
-                                ]
-                            }
-                            await eventbridge.putEvents(params).promise()
-                            return "Success"
-                        }
-                    - EventBus: EventBridgeExample
-            Description: Example Inline Function.
-            TracingConfig:
-                Mode: Active
+            Description: Listen on the custom event bus for Signup events
+            EventBusName: !ImportValue AppSyncTestedEventBusName
+            EventPattern:
+                source:
+                    - custom.AppsyncTested
+                detail-type:
+                    - signup-completed
+            Targets:
+                - Arn: !Ref SignupCompleteWorkflow
+                  Id: SignupCompleteWorkflow
+                  RoleArn: !GetAtt InvokeWorkflowRole.Arn
 
-    LambdaRole:
+    SignupCompleteWorkflow:
+        Type: AWS::StepFunctions::StateMachine
+        Properties:
+            StateMachineName: ApiSignupCompleteWorkflow
+            RoleArn: !GetAtt SignupCompletedRole.Arn
+            DefinitionString: >
+                {
+                  "Comment": "Handles User Signup Completed Workflow",
+                  "StartAt": "Update Create User State",
+                  "States": {
+                      "Update Create User State": {
+                          "Type": "Task",
+                          "Resource": "arn:aws:states:::dynamodb:putItem",
+                            "Parameters": {
+                                "TableName": "appsync-example",
+                                "Item": {
+                                        "id": {"S.$": "$.detail.id"},
+                                        "email": {"S": "example"},
+                                        "status": {"S": "complete"}
+                                       
+                                }
+                          },
+                          "ResultPath": "$.DynamoDB",
+                          "End": true
+                      }
+                  }
+                }
+
+    InvokeWorkflowRole:
         Type: AWS::IAM::Role
         Properties:
-            RoleName: !Sub ${APIName}-lambda-policy
             AssumeRolePolicyDocument:
-                Version: 2012-10-17
+                Version: '2012-10-17'
                 Statement:
                     - Effect: Allow
-                      Action:
-                          - sts:AssumeRole
                       Principal:
                           Service:
-                              - lambda.amazonaws.com
+                              - events.amazonaws.com
+                      Action: sts:AssumeRole
             Policies:
-                - PolicyName: !Sub ${APIName}-Dynamo-lambdapolicy
+                - PolicyName: InvokeCustomerWorkflowsPolicy
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - states:StartExecution
+                            Resource:
+                                - !Ref SignupCompleteWorkflow
+
+    SignupCompletedRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - !Sub states.${AWS::Region}.amazonaws.com
+                      Action: sts:AssumeRole
+            Policies:
+                - PolicyName: PublishEventsPolicy
                   PolicyDocument:
                       Version: '2012-10-17'
                       Statement:
@@ -305,15 +376,6 @@ Resources:
                                 - dynamodb:*
                             Resource:
                                 - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${MyTable}
-                - PolicyName: !Sub ${APIName}-Events-lambdapolicy
-                  PolicyDocument:
-                      Version: '2012-10-17'
-                      Statement:
-                          - Effect: Allow
-                            Action:
-                                - events:*
-                            Resource:
-                                - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/*
 
 Outputs:
     APIKey:

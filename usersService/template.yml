@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+    SignupEventRule:
+        Type: AWS::Events::Rule
+        Properties:
+            Description: Listen on the custom event bus for Signup events
+            EventBusName: !ImportValue AppSyncTestedEventBusName
+            EventPattern:
+                source:
+                    - custom.AppsyncTested
+                detail-type:
+                    - signup
+            Targets:
+                - Arn: !Ref SignupWorkflow
+                  Id: SignupWorkflow
+                  RoleArn: !GetAtt InvokeWorkflowRole.Arn
+
+    SignupWorkflow:
+        Type: AWS::StepFunctions::StateMachine
+        Properties:
+            StateMachineName: SignupWorkflow
+            RoleArn: !GetAtt SignupRole.Arn
+            DefinitionString: !Sub
+                - |-
+                    {
+                      "Comment": "Handles User Signup Workflow",
+                      "StartAt": "Create Cognito User",
+                      "States": {
+                          "Create Cognito User": {
+                              "Type": "Pass",
+                              "Result": {
+                                  "data1": 0.5,
+                                  "data2": 1.5
+                              },
+                              "ResultPath": "$.result",
+                              "Next": "Email User Credentials"
+                          },
+                          "Email User Credentials": {
+                              "Type": "Pass",
+                              "Result": {
+                                  "source": "$.source",
+                                  "event": "signup-completed",
+                                  "data": {
+                                    "id": "$.detail.id"
+                                  }
+                              },
+                              "ResultPath": "$.result",
+                              "Next": "Publish UserCreated Event"
+                          },
+                          "Publish UserCreated Event": {
+                              "Type": "Task",
+                                "Resource": "arn:aws:states:::lambda:invoke",
+                                "Parameters": {
+                                "FunctionName": "${PublishEventsFunctionArn}",
+                                "Payload": {
+                                    "source.$": "$.source",
+                                    "event": "signup-completed",
+                                    "data": {
+                                        "id.$": "$.detail.id"
+                                    }
+                                }
+                              },
+                              "End": true
+                          }
+                      }
+                    }
+                - {
+                      PublishEventsFunctionArn: !ImportValue AppSyncTestedResolverEventFunction
+                  }
+
+    InvokeWorkflowRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - events.amazonaws.com
+                      Action: sts:AssumeRole
+            Policies:
+                - PolicyName: InvokeCustomerWorkflowsPolicy
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - states:StartExecution
+                            Resource:
+                                - !Ref SignupWorkflow
+
+    SignupRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: '2012-10-17'
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - !Sub states.${AWS::Region}.amazonaws.com
+                      Action: sts:AssumeRole
+            Policies:
+                - PolicyName: PublishEventsPolicy
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - lambda:InvokeFunction
+                            Resource:
+                                - !ImportValue AppSyncTestedResolverEventFunction

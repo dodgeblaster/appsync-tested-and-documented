@@ -1,0 +1,42 @@
+{
+    "Comment": "Handles User Signup Workflow",
+    "StartAt": "Create Cognito User",
+    "States": {
+        "Create Cognito User": {
+            "Type": "Pass",
+            "Result": {
+                "data1": 0.5,
+                "data2": 1.5
+            },
+            "ResultPath": "$.result",
+            "Next": "Email User Credentials"
+        },
+        "Email User Credentials": {
+            "Type": "Pass",
+            "Result": {
+                "source": "$.source",
+                "event": "signup-completed",
+                "data": {
+                    "id": "$.detail.id"
+                }
+            },
+            "ResultPath": "$.result",
+            "Next": "Publish UserCreated Event"
+        },
+        "Publish UserCreated Event": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "${PublishEventsFunctionArn}",
+                "Payload": {
+                    "source.$": "$.source",
+                    "event": "signup-completed",
+                    "data": {
+                        "id.$": "$.detail.id"
+                    }
+                }
+            },
+            "End": true
+        }
+    }
+}

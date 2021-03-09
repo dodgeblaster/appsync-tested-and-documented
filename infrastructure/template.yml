@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+    Shared infrastructure for project
+
+Resources:
+    EventBus:
+        Type: AWS::Events::EventBus
+        Properties:
+            Name: AppSyncTested
+
+    ResolverSendEventFunction:
+        Type: AWS::Lambda::Function
+        Properties:
+            Runtime: nodejs12.x
+            Role: !GetAtt LambdaRole.Arn
+            Handler: index.handler
+            Code:
+                ZipFile: !Sub
+                    - |
+                        const aws = require('aws-sdk')
+                        const eventbridge = new aws.EventBridge()
+                        exports.handler = async (event) => {
+                            const params = {
+                                Entries: [
+                                    {
+                                        EventBusName: '${EventBus}',
+                                        Source: event.source,
+                                        DetailType: event.event,
+                                        Time: new Date(),
+                                        Detail: JSON.stringify(event.data)
+                                    }
+                                ]
+                            }
+                            await eventbridge.putEvents(params).promise()
+                            return "Success"
+                        }
+                    - EventBus: !Ref EventBus
+            Description: Example Inline Function.
+            TracingConfig:
+                Mode: Active
+
+    LambdaRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: AppsyncTestedInfra-lambda-policy
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+            Policies:
+                - PolicyName: AppsyncTestedInfra-Events-lambdapolicy
+                  PolicyDocument:
+                      Version: '2012-10-17'
+                      Statement:
+                          - Effect: Allow
+                            Action:
+                                - events:PutEvents
+                            Resource:
+                                - !GetAtt EventBus.Arn
+
+Outputs:
+    EventBusArn:
+        Description: 'The ARN of the event bus'
+        Value: !GetAtt EventBus.Arn
+        Export:
+            Name: AppSyncTestedEventBusArn
+    EventBusName:
+        Description: 'The name of the event bus'
+        Value: !GetAtt EventBus.Name
+        Export:
+            Name: AppSyncTestedEventBusName
+    ResolverSendEventFunction:
+        Description: 'The ARN of our Lambda function'
+        Value: !GetAtt ResolverSendEventFunction.Arn
+        Export:
+            Name: AppSyncTestedResolverEventFunction

@@ -69,7 +69,7 @@ Resources:
     #         QueuedTimeoutInMinutes: 5
     #         Source:
     #             Type: CODEPIPELINE
-    #             BuildSpec: code/buildspec.yml
+    #             BuildSpec: api/buildspec.yml
     #         ServiceRole: !GetAtt CodeBuildServiceRole.Arn
     CodeBuildServiceRole:
         Type: AWS::IAM::Role
@@ -188,7 +188,7 @@ Resources:
                             RoleArn: !GetAtt CloudFormationExecutionRole.Arn
                             StackName: AppsyncTested
                             ChangeSetName: pipeline-changeset
-                            TemplatePath: 'SourceOutput::code/template.yml'
+                            TemplatePath: 'SourceOutput::api/template.yml'
                             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                             ParameterOverrides: '{"APIName": "AppsyncTested"}'
                         InputArtifacts:
@@ -242,7 +242,7 @@ Resources:
                             RoleArn: !GetAtt CloudFormationExecutionRole.Arn
                             StackName: AppsyncTested
                             ChangeSetName: pipeline-changeset
-                            TemplatePath: 'SourceOutput::code/template.yml'
+                            TemplatePath: 'SourceOutput::api/template.yml'
                             Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                             ParameterOverrides: '{"APIName": "AppsyncTested"}'
                         InputArtifacts:
